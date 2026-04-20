@@ -17,7 +17,7 @@ export function PersonChip({
   return (
     <button
       type="button"
-      onClick={onPickup}
+      onClick={onPickup ? (e) => { e.stopPropagation(); onPickup(); } : undefined}
       className={`inline-flex items-center gap-2 px-2 py-1 rounded-full bg-white border text-sm ${onPickup ? 'cursor-pointer select-none hover:bg-black/5' : ''} ${selected ? 'ring-2 ring-draft border-draft' : 'border-black/10'} ${className}`}
     >
       <span
