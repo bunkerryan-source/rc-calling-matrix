@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function SetPasswordPage() {
-  const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +21,12 @@ export default function SetPasswordPage() {
       data: { must_change_password: false },
     });
     if (error) { setError(error.message); setSubmitting(false); return; }
-    router.replace('/');
+    // refreshSession rewrites the auth cookie with the updated user_metadata
+    // so the server middleware stops redirecting back here on the next request.
+    await supabase.auth.refreshSession();
+    // Hard reload (not router.replace) so the component state resets even if
+    // something still routes back to /account/set-password.
+    window.location.assign('/');
   }
 
   return (
