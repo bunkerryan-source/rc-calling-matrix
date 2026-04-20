@@ -8,6 +8,51 @@ import { DragProvider, useDrag } from '@/lib/drag-context';
 import type { FilterState } from '@/lib/filter-state';
 import type { Calling, DraftAssignment, DraftStaging, MasterAssignment, Organization, Person } from '@/lib/types';
 import { movePerson, unassign, setCalled, setSustained } from '@/lib/data/drafts';
+import { PromoteModal } from './promote-modal';
+
+function computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging }: {
+  organizations: Organization[];
+  callings: Calling[];
+  peopleById: Map<string, Person>;
+  masterAssignments: MasterAssignment[];
+  draftAssignments: DraftAssignment[];
+  staging: DraftStaging[];
+}) {
+  const stagedIds = new Set(staging.map((s) => s.person_id));
+  const masterByCalling = new Map(masterAssignments.map((a) => [a.calling_id, a.person_id]));
+  const draftByCalling = new Map(draftAssignments.map((a) => [a.calling_id, a.person_id]));
+  const callingLabel = new Map<string, string>();
+  const orgName = new Map(organizations.map((o) => [o.id, o.name]));
+  for (const c of callings) callingLabel.set(c.id, `${orgName.get(c.organization_id) ?? ''} — ${c.title}`);
+  type Row = { personId: string; was: string; now: string };
+  const byPerson = new Map<string, Row>();
+  const allCallingIds = new Set<string>([...masterByCalling.keys(), ...draftByCalling.keys()]);
+  for (const cid of allCallingIds) {
+    const mPid = masterByCalling.get(cid);
+    const dPid = draftByCalling.get(cid);
+    if (mPid === dPid) continue;
+    if (mPid) {
+      const nowCalling = [...draftByCalling.entries()].find(([, pid]) => pid === mPid)?.[0];
+      const nowLabel = nowCalling ? callingLabel.get(nowCalling)! : (stagedIds.has(mPid) ? 'Staging' : 'Unassigned');
+      byPerson.set(mPid, { personId: mPid, was: callingLabel.get(cid) ?? '—', now: nowLabel });
+    }
+    if (dPid) {
+      if (byPerson.has(dPid)) continue;
+      const wasCalling = [...masterByCalling.entries()].find(([, pid]) => pid === dPid)?.[0];
+      const wasLabel = wasCalling ? callingLabel.get(wasCalling)! : 'Unassigned';
+      byPerson.set(dPid, { personId: dPid, was: wasLabel, now: callingLabel.get(cid) ?? '—' });
+    }
+  }
+  for (const pid of stagedIds) {
+    if (byPerson.has(pid)) continue;
+    const wasCalling = [...masterByCalling.entries()].find(([, p]) => p === pid)?.[0];
+    const wasLabel = wasCalling ? callingLabel.get(wasCalling)! : 'Unassigned';
+    byPerson.set(pid, { personId: pid, was: wasLabel, now: 'Staging' });
+  }
+  return [...byPerson.values()]
+    .map((r) => ({ ...r, name: peopleById.get(r.personId)?.name ?? r.personId }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function DraftView(props: {
   userId: string | null;
@@ -37,6 +82,7 @@ function DraftViewInner({
   const [filter, setFilter] = useState<FilterState>({ all: true, orgSlugs: new Set(), setApart: false, noCalling: false });
   const [localAssign, setLocalAssign] = useState(draftAssignments);
   const [localStage, setLocalStage] = useState(staging);
+  const [promoteOpen, setPromoteOpen] = useState(false);
   const [, startTransition] = useTransition();
   const drag = useDrag();
 
@@ -73,6 +119,11 @@ function DraftViewInner({
   const visibleOrgs = filter.all
     ? organizations
     : organizations.filter((o) => filter.orgSlugs.has(o.slug));
+
+  const diff = useMemo(() => computeDiff({
+    organizations, callings, peopleById,
+    masterAssignments, draftAssignments: localAssign, staging: localStage,
+  }), [organizations, callings, peopleById, masterAssignments, localAssign, localStage]);
 
   function applyLocalMove(callingId: string, personId: string, fromCallingId: string | null) {
     setLocalAssign((prev) => {
@@ -135,10 +186,18 @@ function DraftViewInner({
                        noCallingCount={unassignedPeople.length} mode="draft" onChange={setFilter} />
       </div>
       <main className="flex-1">
-        <div className="bg-draft text-white px-6 py-3">
-          <p className="font-numeric text-xs uppercase tracking-wider opacity-80">Draft</p>
-          <h1 className="text-2xl">{draft.name}</h1>
-          {drag.active && <p className="text-xs mt-1 opacity-90">Carrying: {peopleById.get(drag.active.personId)?.name} — tap a calling to place, or tap Members Without a Calling to unassign.</p>}
+        <div className="bg-draft text-white px-6 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="font-numeric text-xs uppercase tracking-wider opacity-80">Draft</p>
+            <h1 className="text-2xl">{draft.name}</h1>
+            {drag.active && <p className="text-xs mt-1 opacity-90">Carrying: {peopleById.get(drag.active.personId)?.name} — tap a calling to place, or tap Members Without a Calling to unassign.</p>}
+          </div>
+          {!draft.archived && (
+            <button onClick={() => setPromoteOpen(true)}
+                    className="px-3 py-1.5 rounded bg-white text-draft font-medium">
+              Promote
+            </button>
+          )}
         </div>
 
         <section className="px-6 py-4 border-b border-black/10 bg-white">
@@ -198,6 +257,15 @@ function DraftViewInner({
           </div>
         </section>
       </main>
+
+      {promoteOpen && (
+        <PromoteModal
+          draftId={draft.id}
+          draftName={draft.name}
+          diff={diff.map(({ name, was, now }) => ({ name, was, now }))}
+          onClose={() => setPromoteOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -212,44 +280,7 @@ function ChangesPanel({
   draftAssignments: DraftAssignment[];
   staging: DraftStaging[];
 }) {
-  const stagedIds = new Set(staging.map((s) => s.person_id));
-  const masterByCalling = new Map(masterAssignments.map((a) => [a.calling_id, a.person_id]));
-  const draftByCalling = new Map(draftAssignments.map((a) => [a.calling_id, a.person_id]));
-  const callingLabel = new Map<string, string>();
-  const orgName = new Map(organizations.map((o) => [o.id, o.name]));
-  for (const c of callings) callingLabel.set(c.id, `${orgName.get(c.organization_id) ?? ''} — ${c.title}`);
-
-  // Collect one row per affected person
-  type Row = { personId: string; was: string; now: string };
-  const byPerson = new Map<string, Row>();
-
-  const allCallingIds = new Set<string>([...masterByCalling.keys(), ...draftByCalling.keys()]);
-  for (const cid of allCallingIds) {
-    const mPid = masterByCalling.get(cid);
-    const dPid = draftByCalling.get(cid);
-    if (mPid === dPid) continue;
-    if (mPid) {
-      const nowCalling = [...draftByCalling.entries()].find(([, pid]) => pid === mPid)?.[0];
-      const nowLabel = nowCalling ? callingLabel.get(nowCalling)! : (stagedIds.has(mPid) ? 'Staging' : 'Unassigned');
-      byPerson.set(mPid, { personId: mPid, was: callingLabel.get(cid) ?? '—', now: nowLabel });
-    }
-    if (dPid) {
-      if (byPerson.has(dPid)) continue;
-      const wasCalling = [...masterByCalling.entries()].find(([, pid]) => pid === dPid)?.[0];
-      const wasLabel = wasCalling ? callingLabel.get(wasCalling)! : 'Unassigned';
-      byPerson.set(dPid, { personId: dPid, was: wasLabel, now: callingLabel.get(cid) ?? '—' });
-    }
-  }
-  for (const pid of stagedIds) {
-    if (byPerson.has(pid)) continue;
-    const wasCalling = [...masterByCalling.entries()].find(([, p]) => p === pid)?.[0];
-    const wasLabel = wasCalling ? callingLabel.get(wasCalling)! : 'Unassigned';
-    byPerson.set(pid, { personId: pid, was: wasLabel, now: 'Staging' });
-  }
-
-  const rows = [...byPerson.values()]
-    .map((r) => ({ ...r, name: peopleById.get(r.personId)?.name ?? r.personId }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const rows = computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging });
 
   return (
     <section className="px-6 py-4 border-b border-black/10 bg-surface">
