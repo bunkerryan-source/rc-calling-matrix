@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { Menu, X } from 'lucide-react';
 import { SidebarFilter } from './sidebar-filter';
 import { OrgCard } from './org-card';
 import { UnassignedSection } from './unassigned-section';
@@ -17,6 +18,7 @@ export function MasterView({
   assignments: MasterAssignment[];
 }) {
   const [filter, setFilter] = useState<FilterState>({ all: true, orgSlugs: new Set(), setApart: false, noCalling: false });
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const assignmentsByCalling = useMemo(() => new Map(assignments.map((a) => [a.calling_id, a])), [assignments]);
@@ -45,16 +47,27 @@ export function MasterView({
     : organizations.filter((o) => filter.orgSlugs.has(o.slug) || (filter.orgSlugs.size === 0 && !filter.noCalling));
 
   return (
-    <div className="flex min-h-screen">
-      <SidebarFilter
-        userId={userId}
-        organizations={organizations}
-        counts={orgCounts}
-        noCallingCount={unassigned.length}
-        mode="master"
-        onChange={setFilter}
-      />
-      <main className="flex-1 px-6 py-8">
+    <div className="md:flex md:min-h-screen">
+      <button
+        aria-label="Toggle filter menu"
+        className="md:hidden fixed top-3 left-3 z-40 bg-white border border-black/20 rounded p-2"
+        onClick={() => setDrawerOpen((v) => !v)}
+      >
+        {drawerOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+      </button>
+
+      <div className={`${drawerOpen ? 'block' : 'hidden'} md:block md:sticky md:top-0 md:h-screen`}>
+        <SidebarFilter
+          userId={userId}
+          organizations={organizations}
+          counts={orgCounts}
+          noCallingCount={unassigned.length}
+          mode="master"
+          onChange={setFilter}
+        />
+      </div>
+
+      <main className="flex-1 px-6 pt-16 pb-8 md:py-8">
         <header className="mb-8">
           <h1 className="text-3xl text-primary">Calling Matrix — Rancho Carrillo Ward</h1>
           <p className="mt-2 text-sm text-black/60 font-numeric">
