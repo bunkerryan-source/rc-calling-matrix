@@ -1,10 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function SignInPage() {
+  return (
+    <Suspense fallback={<SignInShell />}>
+      <SignInForm />
+    </Suspense>
+  );
+}
+
+function SignInShell(props: { error?: string | null }) {
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-surface px-6">
+      <div className="w-full max-w-sm bg-white border border-black/10 rounded-lg p-8 shadow-sm">
+        <h1 className="text-2xl text-primary mb-6">Calling Matrix</h1>
+        <p className="text-sm text-black/60">Loading…</p>
+        {props.error && <p className="text-sm text-red-700 mt-3">{props.error}</p>}
+      </div>
+    </main>
+  );
+}
+
+function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState('');
