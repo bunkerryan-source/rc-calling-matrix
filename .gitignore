@@ -42,3 +42,5 @@ next-env.d.ts
 
 # claude code per-machine session state
 .claude/
+
+.vercel
