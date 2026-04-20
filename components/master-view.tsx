@@ -1,24 +1,43 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { SidebarFilter } from './sidebar-filter';
 import { OrgCard } from './org-card';
 import { UnassignedSection } from './unassigned-section';
+import { createClient } from '@/lib/supabase/client';
+import { WARD_ID } from '@/lib/types';
 import type { FilterState } from '@/lib/filter-state';
 import type { Calling, MasterAssignment, Organization, Person } from '@/lib/types';
 
-export function MasterView({
-  userId, organizations, callings, people, assignments,
-}: {
+export function MasterView(props: {
   userId: string | null;
   organizations: Organization[];
   callings: Calling[];
   people: Person[];
   assignments: MasterAssignment[];
 }) {
+  const { userId, organizations, callings } = props;
+  const [people, setPeople] = useState(props.people);
+  const [assignments, setAssignments] = useState(props.assignments);
   const [filter, setFilter] = useState<FilterState>({ all: true, orgSlugs: new Set(), setApart: false, noCalling: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('master')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'master_assignments' }, async () => {
+        const { data } = await supabase.from('master_assignments').select('calling_id, person_id, set_apart');
+        if (data) setAssignments(data);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, async () => {
+        const { data } = await supabase.from('people').select('id, name, slug').eq('ward_id', WARD_ID).order('name');
+        if (data) setPeople(data);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const assignmentsByCalling = useMemo(() => new Map(assignments.map((a) => [a.calling_id, a])), [assignments]);
