@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { SidebarFilter } from './sidebar-filter';
 import { OrgCard } from './org-card';
 import { PersonChip } from './person-chip';
@@ -8,6 +8,7 @@ import { DragProvider, useDrag } from '@/lib/drag-context';
 import type { FilterState } from '@/lib/filter-state';
 import type { Calling, DraftAssignment, DraftStaging, MasterAssignment, Organization, Person } from '@/lib/types';
 import { movePerson, unassign, setCalled, setSustained } from '@/lib/data/drafts';
+import { createClient } from '@/lib/supabase/client';
 import { PromoteModal } from './promote-modal';
 
 function computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging }: {
@@ -85,6 +86,24 @@ function DraftViewInner({
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [, startTransition] = useTransition();
   const drag = useDrag();
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`draft:${draft.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'draft_assignments', filter: `draft_id=eq.${draft.id}` }, async () => {
+        const { data } = await supabase.from('draft_assignments')
+          .select('draft_id, calling_id, person_id, called, sustained').eq('draft_id', draft.id);
+        if (data) setLocalAssign(data);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'draft_staging', filter: `draft_id=eq.${draft.id}` }, async () => {
+        const { data } = await supabase.from('draft_staging')
+          .select('draft_id, person_id').eq('draft_id', draft.id);
+        if (data) setLocalStage(data);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [draft.id]);
 
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const callingsByOrg = useMemo(() => {
