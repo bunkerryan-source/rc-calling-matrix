@@ -11,7 +11,7 @@ const SIDEBAR_ENTRIES: SidebarEntry[] = [
   { type: 'single', label: 'Bishopric', slug: 'bishopric' },
   { type: 'single', label: 'Clerks/Extended Bishopric', slug: 'clerks-extended-bishopric' },
   { type: 'group', label: 'Young Men', slugs: ['deacons-quorum', 'teachers-quorum', 'priests-quorum'] },
-  { type: 'group', label: 'Young Women', slugs: ['young-women-11-12', 'young-women-13-14', 'young-women-15-18'] },
+  { type: 'group', label: 'Young Women', slugs: ['young-women', 'young-women-11-12', 'young-women-13-14', 'young-women-15-18'] },
   { type: 'single', label: 'Sunday School', slug: 'sunday-school' },
   { type: 'single', label: 'Relief Society', slug: 'relief-society' },
   { type: 'single', label: "Elder's Quorum", slug: 'elders-quorum' },
@@ -21,7 +21,6 @@ const SIDEBAR_ENTRIES: SidebarEntry[] = [
     type: 'group',
     label: 'Misc',
     slugs: [
-      'young-women',
       'emergency-prep',
       'music',
       'employment',
