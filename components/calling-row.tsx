@@ -33,9 +33,9 @@ export function CallingRow({
   onToggleSustained?: (callingId: string, next: boolean) => void;
 }) {
   const drag = mode === 'draft' ? useDrag() : null;
-  const activeIsThis = drag?.active?.personId === personId;
+  const activeIsThis = drag?.active?.personId === personId && personId !== null;
 
-  function onCellClick() {
+  function onRowClick() {
     if (mode !== 'draft' || !drag) return;
     if (drag.active) {
       onMove?.({
@@ -45,28 +45,24 @@ export function CallingRow({
         fromStaging: drag.active.fromStaging,
       });
       drag.drop();
+    } else if (personId) {
+      drag.pickup({ personId, fromCallingId: callingId, fromStaging: false });
     }
   }
 
-  function onPickup() {
-    if (mode !== 'draft' || !drag || !personId) return;
-    drag.pickup({ personId, fromCallingId: callingId, fromStaging: false });
-  }
+  const rowCursor = mode === 'draft' && (personId || drag?.active) ? 'cursor-pointer' : '';
+  const rowBg = drag?.active && !activeIsThis ? 'bg-draft/5' : '';
 
   return (
     <li
-      onClick={onCellClick}
-      className={`flex items-center justify-between gap-3 py-2 border-b border-black/5 last:border-b-0 ${drag?.active && !activeIsThis ? 'cursor-copy bg-draft/5' : ''}`}
+      onClick={onRowClick}
+      className={`flex items-center justify-between gap-3 py-2 border-b border-black/5 last:border-b-0 ${rowCursor} ${rowBg}`}
     >
       <div className="flex-1 min-w-0">
         <p className="text-xs uppercase tracking-wide text-black/50">{titleCase(title)}</p>
         <div className="mt-1">
           {personName ? (
-            <PersonChip
-              name={personName}
-              selected={activeIsThis}
-              onPickup={mode === 'draft' ? onPickup : undefined}
-            />
+            <PersonChip name={personName} selected={activeIsThis} />
           ) : (
             <span className="text-sm italic text-black/40">Unfilled</span>
           )}

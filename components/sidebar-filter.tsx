@@ -2,7 +2,42 @@
 
 import { useFilterState, type FilterState } from '@/lib/filter-state';
 import type { Organization } from '@/lib/types';
-import { titleCase } from '@/lib/utils/title-case';
+
+type SidebarEntry =
+  | { type: 'single'; label: string; slug: string }
+  | { type: 'group'; label: string; slugs: string[] };
+
+const SIDEBAR_ENTRIES: SidebarEntry[] = [
+  { type: 'single', label: 'Bishopric', slug: 'bishopric' },
+  { type: 'single', label: 'Clerks/Extended Bishopric', slug: 'clerks-extended-bishopric' },
+  { type: 'group', label: 'Young Men', slugs: ['deacons-quorum', 'teachers-quorum', 'priests-quorum'] },
+  { type: 'group', label: 'Young Women', slugs: ['young-women-11-12', 'young-women-13-14', 'young-women-15-18'] },
+  { type: 'single', label: 'Sunday School', slug: 'sunday-school' },
+  { type: 'single', label: 'Relief Society', slug: 'relief-society' },
+  { type: 'single', label: "Elder's Quorum", slug: 'elders-quorum' },
+  { type: 'single', label: 'Primary', slug: 'primary' },
+  { type: 'single', label: 'Stake Callings', slug: 'stake-callings' },
+  {
+    type: 'group',
+    label: 'Misc',
+    slugs: [
+      'young-women',
+      'emergency-prep',
+      'music',
+      'employment',
+      'single-adults',
+      'ward-history',
+      'friendship-meal-coordination',
+      'temple-prep',
+      'building-maintenance',
+      'ward-activities',
+    ],
+  },
+];
+
+function entrySlugs(e: SidebarEntry): string[] {
+  return e.type === 'single' ? [e.slug] : e.slugs;
+}
 
 export function SidebarFilter({
   userId,
@@ -21,11 +56,33 @@ export function SidebarFilter({
 }) {
   const [state, save] = useFilterState(userId);
 
+  const orgIdBySlug = new Map(organizations.map((o) => [o.slug, o.id]));
+
   function commit(next: FilterState) { save(next); onChange(next); }
 
-  function toggleOrg(slug: string) {
-    const next = { ...state, all: false, orgSlugs: new Set(state.orgSlugs) };
-    if (next.orgSlugs.has(slug)) next.orgSlugs.delete(slug); else next.orgSlugs.add(slug);
+  function entryCount(e: SidebarEntry): number {
+    let total = 0;
+    for (const slug of entrySlugs(e)) {
+      const id = orgIdBySlug.get(slug);
+      if (id) total += counts.get(id) ?? 0;
+    }
+    return total;
+  }
+
+  function entryActive(e: SidebarEntry): boolean {
+    const slugs = entrySlugs(e);
+    return slugs.length > 0 && slugs.every((s) => state.orgSlugs.has(s));
+  }
+
+  function toggleEntry(e: SidebarEntry) {
+    const slugs = entrySlugs(e);
+    const next: FilterState = { ...state, all: false, orgSlugs: new Set(state.orgSlugs) };
+    const allOn = slugs.every((s) => next.orgSlugs.has(s));
+    if (allOn) {
+      for (const s of slugs) next.orgSlugs.delete(s);
+    } else {
+      for (const s of slugs) next.orgSlugs.add(s);
+    }
     if (next.orgSlugs.size === 0 && !next.setApart && !next.noCalling) next.all = true;
     commit(next);
   }
@@ -46,12 +103,13 @@ export function SidebarFilter({
         <span>All</span>
       </button>
       <div className="mt-2 space-y-1">
-        {organizations.map((o) => {
-          const active = state.orgSlugs.has(o.slug);
+        {SIDEBAR_ENTRIES.map((e) => {
+          const active = entryActive(e);
+          const count = entryCount(e);
           return (
-            <button key={o.id} className={pillClass(active)} onClick={() => toggleOrg(o.slug)}>
-              <span>{titleCase(o.name)}</span>
-              <span className="font-numeric text-xs opacity-70">{counts.get(o.id) ?? 0}</span>
+            <button key={e.label} className={pillClass(active)} onClick={() => toggleEntry(e)}>
+              <span>{e.label}</span>
+              <span className="font-numeric text-xs opacity-70">{count}</span>
             </button>
           );
         })}
