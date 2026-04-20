@@ -5,48 +5,37 @@ A multi-user Next.js + Supabase web app that replaces the Rancho Carrillo Ward b
 ## Source of truth (read first)
 
 1. **[Design spec](docs/superpowers/specs/2026-04-19-rc-calling-matrix-design.md)** — authoritative. All design decisions live here.
-2. **[Implementation plan](docs/superpowers/plans/2026-04-19-rc-calling-matrix.md)** — 40-task plan currently in progress (see Status below).
+2. **[Implementation plan](docs/superpowers/plans/2026-04-19-rc-calling-matrix.md)** — 40-task plan, all tasks complete.
 3. **[Original spec from Ryan](docs/source/rc-calling-matrix-spec.md)** — historical input that informed the design doc.
 4. **[JSX reference artifact](docs/source/rc-calling-matrix.jsx)** — used as a UX/data reference only. **Do not** copy patterns from it; the design doc supersedes it.
 
-## Status (as of 2026-04-19, end of session 1)
+## Status (as of 2026-04-20, end of session 2)
 
-**Plan progress: 11/40 tasks complete.** Phase 0 (preflight), Phase 1 (Next.js scaffolding), and Phase 2 (Supabase backend) are done. Next session resumes at **Task 11: Supabase client helpers**.
+**MVP shipped.** All 40 plan tasks complete. Live at **https://rccallingmatrix.vercel.app**.
 
-| Phase | Tasks | Status |
-|---|---|---|
-| 0 — Preflight | 0 | done |
-| 1 — Scaffolding | 1–5 | done |
-| 2 — Supabase backend | 6–10 | done |
-| 3 — Auth | 11–15 | next |
-| 4 — Domain types + utilities | 16–17 | pending |
-| 5 — Master view | 18–25 | pending |
-| 6 — Drafts | 26–30 | pending |
-| 7 — Realtime | 31–33 | pending |
-| 8 — Admin | 34–38 | pending |
-| 9 — Header nav | 39 | pending |
-| 10 — Deploy | 40 | pending |
+Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) all landed in session 2 along with several post-deploy bug fixes.
 
-## How to resume tomorrow
+## How to pick up next session
 
-1. Read this file, the design spec, and the implementation plan.
-2. Follow `superpowers:subagent-driven-development` — the workflow used in session 1. Dispatch a fresh subagent per task; spec-review then code-quality-review after each (skip the formal review for trivial mechanical tasks like file moves and tsconfig edits).
-3. Resume at Task 11. The plan file has every task spelled out with file paths, full code blocks, and verification steps.
-4. Trivial / mechanical Supabase-MCP tasks (write SQL → apply migration → verify → commit) are faster done by the controller directly than via subagent.
+1. Read this file, the design spec, and the original spec.
+2. Site is live — start by running smoke checks against production before making changes.
+3. For new features, still use the `superpowers:subagent-driven-development` workflow (fresh subagent per task; spec-review then code-quality-review).
+4. Pushes to `origin/main` auto-deploy to Vercel production.
 
 ## Stack (locked-in)
 
 - **Next.js 16** (App Router, TypeScript strict, `noUncheckedIndexedAccess`)
 - **React 19**
-- **Tailwind CSS v3** — manually downgraded from the v4 default in Task 4. Do **not** upgrade to v4 without rewriting the design tokens in `app/globals.css` and `tailwind.config.ts`. The plan's CSS uses `@tailwind base/components/utilities` directives, which are v3 syntax.
-- **Supabase** — Postgres + Auth + Realtime + RPCs. Project: `calling-matrix-dev` on org "Ryan Bunker".
+- **Tailwind CSS v3** — manually downgraded from the v4 default. Do **not** upgrade to v4 without rewriting the design tokens in `app/globals.css` and `tailwind.config.ts`. The plan's CSS uses `@tailwind base/components/utilities` directives, which are v3 syntax.
+- **Supabase** (same project serves dev and prod in MVP):
+  - Name: `calling-matrix-dev` on org "Ryan Bunker"
   - Project ID: `rhdcjakrotxeeacuwgmp`
   - URL: `https://rhdcjakrotxeeacuwgmp.supabase.co`
   - Region: `us-west-1`
   - Cost: $10/mo (Pro tier, recurring)
 - **Fonts** — Source Serif 4 (serif), Inter (sans), JetBrains Mono (mono), all via `next/font/google`.
-- **Auth** — `@supabase/supabase-js` + `@supabase/ssr` (cookie-based). Middleware-gated routes. No reset emails — admin resets passwords manually.
-- **Hosting** — Vercel (default subdomain). Production Supabase project gets created in Task 40.
+- **Auth** — `@supabase/supabase-js` + `@supabase/ssr` (cookie-based). Routes gated by `proxy.ts` (Next.js 16 renamed middleware → proxy). No reset emails — admin resets passwords manually via Supabase dashboard.
+- **Hosting** — Vercel, team `bunkerryan-sources-projects`, project `rccallingmatrix`. GitHub integration is wired (auto-deploy on push to main).
 
 ## Key facts to remember
 
@@ -55,36 +44,58 @@ A multi-user Next.js + Supabase web app that replaces the Rancho Carrillo Ward b
 - **Master is read-only** except the Set Apart toggle. All other edits happen in copy-on-write **drafts** that are promoted back to master via the `promote_draft(uuid)` RPC.
 - **Hard deletes with `ON DELETE CASCADE`** on assignment tables. Names are preserved in `promotion_history.snapshot` (jsonb) for audit. No FK from history.
 - **Promotion is atomic** — handled by the `promote_draft` RPC in `supabase/migrations/20260419120200_rpcs.sql`. Preserves `set_apart` only when the same person stays in the same calling.
-- **Tap-to-move UX** is primary; HTML5 drag is skipped for MVP.
-- **Realtime via Supabase `postgres_changes` + presence channels** — wired in Tasks 31–33.
+- **Tap-to-move UX** is primary; HTML5 drag is skipped for MVP. The tap-to-move logic lives entirely on the `CallingRow` `<li>` onClick — the PersonChip inside a calling row has no click handler, so taps bubble up. Row decides pickup vs. drop from `drag.active`.
+- **Realtime via Supabase `postgres_changes` + presence channels** — master and draft views both subscribe.
+- **Sidebar groups** — the sidebar in master/draft views groups orgs into virtual entries (Young Men = Deacons+Teachers+Priests; Young Women = YW umbrella + 11-12/13-14/15-18; Misc = the 9 aux orgs). Config lives inline in `components/sidebar-filter.tsx`. Underlying filter state still stores raw org slugs.
 
-## Divergences from the plan (already applied)
+## Deployment info
 
-- **Task 1** — `create-next-app` installed Next.js 16 (not 14). Working fine; flagged for context.
-- **Task 4** — Tailwind v4 → v3 downgrade was added (plan was written for v3, scaffolder defaulted to v4). New `postcss.config.mjs` uses v3-style plugin config.
-- **Task 8** — RLS policy SQL had a bug in the plan: `format('create policy %I_select on %I ...', t||'_s', t)` would have produced invalid SQL (quoted identifier followed by literal text). Fixed by dropping the `_select`/`_insert`/`_update`/`_delete` suffix from the format string. Policies are now `<table>_s|i|u|d`.
-- **Task 10** — Used the Step-5 fixed generator directly (skipped Step 1 buggy version). Final row counts: 143 people, 23 orgs, 176 callings, 146 assignments. The plan estimated ~108 callings and ~130 assignments — actual is higher because Sunday School / Primary / Relief Society / Stake Callings have more positions than the rough estimate suggested.
+- **Production URL:** https://rccallingmatrix.vercel.app (bare alias; also reachable at `rccallingmatrix-bunkerryan-sources-projects.vercel.app`)
+- **Vercel project:** `prj_8MsLDHA5bZlRUdqvl674cGVquVj2` (team `team_cvOrlfMiLR7nAdZryqer1lEn`)
+- **Env vars (production scope):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — both point at the dev Supabase project.
+- **Admin user:** `bunker.ryan@gmail.com` — created via Supabase dashboard, `must_change_password: false`. (Plan originally specified `rbunker@abpcapital.com`; swapped to Gmail during session 2.)
+- **Gotcha: `vercel project add` creates projects with framework preset "Other"**, not auto-detected. Must be changed to **Next.js** in the Vercel dashboard Settings → Build & Development Settings before the first deploy will serve anything — otherwise Vercel looks for static files in `./public` and every route returns 404. CLI has no command to set this; dashboard only.
+- **Gotcha: Vercel "Deployment Protection" is on by default for new projects.** That's an SSO wall — users without a Vercel login get 404. Must be disabled in Settings → Deployment Protection for a public-facing app that uses its own auth.
 
-## Open items for next session
+## Known divergences from the plan
 
-- **Task 11–14** — Auth scaffolding. Should be straightforward.
-- **Task 15** — Provision Ryan's user. Will need Ryan's chosen admin password (he said he'd send it in a follow-up message). Confirmed email is `rbunker@abpcapital.com`. Skip the temp-password / set-password flow for him.
-- **Task 40** — Will need a separate `calling-matrix-prod` Supabase project ($10/mo additional) and Vercel deploy authorization. Vercel preview env vars point to dev; production env vars point to prod.
+- **Task 1** — `create-next-app` installed Next.js 16 (plan said 14). Working fine.
+- **Task 4** — Tailwind v4 → v3 downgrade.
+- **Task 8** — RLS policy migration SQL had a bug in the plan; fixed to produce valid policy names (`<table>_s|i|u|d`).
+- **Task 10** — Final seed counts: 143 people, 23 orgs, 176 callings, 146 assignments (plan under-estimated because Sunday School / Primary / RS / Stake Callings have more positions than expected).
+- **Task 15** — Admin user email is `bunker.ryan@gmail.com`, not `rbunker@abpcapital.com`.
+- **Task 40** — Plan called for a separate `calling-matrix-prod` Supabase project. Skipped — prod Vercel points at the dev Supabase project. Low-stakes ward tool; can split later if needed.
+
+## Post-deploy bugs fixed (session 2)
+
+- **Middleware → proxy** — Next.js 16 renamed the convention. `middleware.ts` → `proxy.ts`, exported function is `proxy`. `lib/supabase/middleware.ts` helper kept the old name (it's not a Next.js convention file).
+- **`useSearchParams` needs Suspense** — Next.js 16 strict prerendering. `app/sign-in/page.tsx` wraps the form in `<Suspense>`.
+- **Turbopack cache corruption after rename** — `rm -rf .next` (Windows: `rmdir /s /q .next`) clears it.
+- **Tap-to-move not working** — first attempted fix (stopPropagation on PersonChip) only handled one leg. Final fix: moved all pickup+drop logic to `CallingRow`'s `<li>` onClick; chip has no click handler of its own inside calling rows. Commit `35ffad0`.
+- **Sidebar mis-grouped** — initially showed one pill per org; updated to grouped entries per ward spec. Young Women umbrella org moved from Misc → Young Women group. Commit `87e07b4`.
 
 ## Workflow conventions
 
 - Working dir: `c:\Users\rbunker\claude-workspace\projects\church\rc-calling-matrix`
 - Branch: `main`. Remote: `https://github.com/bunkerryan-source/rc-calling-matrix`
-- Commit per task. Commit messages use imperative mood, no Claude trailer per Ryan's preference.
-- Manual QA only — no automated test runner in MVP. "Run the test" steps in the plan are smoke checks via `npm run dev`.
-- Migrations live at `supabase/migrations/` and are applied via the Supabase MCP (`mcp__claude_ai_Supabase__apply_migration`). Already applied: initial schema, RLS, RPCs, seed.
+- Commit per task. Imperative mood, no Claude trailer per Ryan's preference.
+- Manual QA only — no automated test runner. Smoke checks via `npm run dev` locally and against prod after deploy.
+- Migrations at `supabase/migrations/` applied via the Supabase MCP. Already applied: initial schema, RLS, RPCs, seed.
+- `.vercel/` directory is gitignored (added by `vercel link`).
 
 ## Stack-specific gotchas
 
 - Next.js 16 default uses Turbopack. The `--no-turbopack` flag was passed during scaffold but may have been a no-op.
 - `app/page.tsx` JSX intrinsic types: `react-jsx` mode (set by create-next-app, kept).
 - `paths` in tsconfig: `"@/*": ["./*"]` — root-anchored, no `src/` prefix.
-- `.env.local` is committed-ignored via the `.env*` pattern in `.gitignore`. `.env.example` was force-added (`git add -f`) since the same pattern would otherwise exclude it.
+- `.env.local` is committed-ignored via the `.env*` pattern in `.gitignore`. `.env.example` was force-added (`git add -f`).
+
+## Potential next steps
+
+- End-to-end smoke test on prod by the bishopric.
+- Add bishopric members to `user_access` (each needs a Supabase auth user first via dashboard).
+- If concurrent editing proves messy, consider splitting a dedicated prod Supabase project.
+- Consider swapping tap-to-move for real HTML5 drag if bishopric members find click-then-click unintuitive (currently intentional per spec).
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
