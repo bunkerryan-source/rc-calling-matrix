@@ -1,21 +1,24 @@
+'use client';
+
 import { initials } from '@/lib/utils/initials';
 import { avatarBg } from '@/lib/utils/avatar-bg';
 
 export function PersonChip({
   name,
-  draggable = false,
-  onPointerDown,
+  onPickup,
+  selected = false,
   className = '',
 }: {
   name: string;
-  draggable?: boolean;
-  onPointerDown?: (e: React.PointerEvent) => void;
+  onPickup?: () => void;
+  selected?: boolean;
   className?: string;
 }) {
   return (
-    <span
-      onPointerDown={onPointerDown}
-      className={`inline-flex items-center gap-2 px-2 py-1 rounded-full bg-white border border-black/10 text-sm ${draggable ? 'cursor-grab active:cursor-grabbing select-none' : ''} ${className}`}
+    <button
+      type="button"
+      onClick={onPickup}
+      className={`inline-flex items-center gap-2 px-2 py-1 rounded-full bg-white border text-sm ${onPickup ? 'cursor-pointer select-none hover:bg-black/5' : ''} ${selected ? 'ring-2 ring-draft border-draft' : 'border-black/10'} ${className}`}
     >
       <span
         aria-hidden
@@ -25,6 +28,6 @@ export function PersonChip({
         {initials(name)}
       </span>
       <span>{name}</span>
-    </span>
+    </button>
   );
 }

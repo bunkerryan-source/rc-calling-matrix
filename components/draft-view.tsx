@@ -1,13 +1,28 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { SidebarFilter } from './sidebar-filter';
 import { OrgCard } from './org-card';
 import { PersonChip } from './person-chip';
+import { DragProvider, useDrag } from '@/lib/drag-context';
 import type { FilterState } from '@/lib/filter-state';
 import type { Calling, DraftAssignment, DraftStaging, MasterAssignment, Organization, Person } from '@/lib/types';
+import { movePerson, unassign, setCalled, setSustained } from '@/lib/data/drafts';
 
-export function DraftView({
+export function DraftView(props: {
+  userId: string | null;
+  draft: { id: string; name: string; archived: boolean };
+  masterAssignments: MasterAssignment[];
+  organizations: Organization[];
+  callings: Calling[];
+  people: Person[];
+  draftAssignments: DraftAssignment[];
+  staging: DraftStaging[];
+}) {
+  return <DragProvider><DraftViewInner {...props} /></DragProvider>;
+}
+
+function DraftViewInner({
   userId, draft, masterAssignments, organizations, callings, people, draftAssignments, staging,
 }: {
   userId: string | null;
@@ -20,24 +35,33 @@ export function DraftView({
   staging: DraftStaging[];
 }) {
   const [filter, setFilter] = useState<FilterState>({ all: true, orgSlugs: new Set(), setApart: false, noCalling: false });
+  const [localAssign, setLocalAssign] = useState(draftAssignments);
+  const [localStage, setLocalStage] = useState(staging);
+  const [, startTransition] = useTransition();
+  const drag = useDrag();
 
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
-  const draftAssignByCalling = useMemo(() => new Map(draftAssignments.map((a) => [a.calling_id, a])), [draftAssignments]);
-  const masterAssignByCalling = useMemo(() => new Map(masterAssignments.map((a) => [a.calling_id, a])), [masterAssignments]);
   const callingsByOrg = useMemo(() => {
     const m = new Map<string, Calling[]>();
     for (const c of callings) { const l = m.get(c.organization_id) ?? []; l.push(c); m.set(c.organization_id, l); }
     return m;
   }, [callings]);
-  const assignedIds = useMemo(() => new Set(draftAssignments.map((a) => a.person_id)), [draftAssignments]);
-  const stagedIds = useMemo(() => new Set(staging.map((s) => s.person_id)), [staging]);
-  const unassigned = useMemo(
+
+  const displayMap = useMemo(() =>
+    new Map(localAssign.map((a) => [a.calling_id, { calling_id: a.calling_id, person_id: a.person_id, set_apart: false }])),
+    [localAssign]);
+
+  const draftMeta = useMemo(() => new Map(localAssign.map((a) => [a.calling_id, { called: a.called, sustained: a.sustained }])), [localAssign]);
+
+  const assignedIds = useMemo(() => new Set(localAssign.map((a) => a.person_id)), [localAssign]);
+  const stagedIds = useMemo(() => new Set(localStage.map((s) => s.person_id)), [localStage]);
+  const unassignedPeople = useMemo(
     () => people.filter((p) => !assignedIds.has(p.id) && !stagedIds.has(p.id)),
     [people, assignedIds, stagedIds]
   );
   const stagedPeople = useMemo(
-    () => staging.map((s) => peopleById.get(s.person_id)!).filter(Boolean),
-    [staging, peopleById]
+    () => localStage.map((s) => peopleById.get(s.person_id)).filter((p): p is Person => !!p),
+    [localStage, peopleById]
   );
 
   const orgCounts = useMemo(() => {
@@ -50,23 +74,71 @@ export function DraftView({
     ? organizations
     : organizations.filter((o) => filter.orgSlugs.has(o.slug));
 
-  // Assignments-for-display: use draft values
-  const displayAssignments = useMemo(
-    () => draftAssignments.map((a) => ({ calling_id: a.calling_id, person_id: a.person_id, set_apart: false })),
-    [draftAssignments]
-  );
-  const displayMap = useMemo(() => new Map(displayAssignments.map((a) => [a.calling_id, a])), [displayAssignments]);
+  function applyLocalMove(callingId: string, personId: string, fromCallingId: string | null) {
+    setLocalAssign((prev) => {
+      const next = prev.filter((a) => a.person_id !== personId);
+      const displaced = next.find((a) => a.calling_id === callingId);
+      const cleaned = next.filter((a) => a.calling_id !== callingId);
+      cleaned.push({ draft_id: draft.id, calling_id: callingId, person_id: personId, called: false, sustained: false });
+      if (displaced && displaced.person_id !== personId) {
+        setLocalStage((s) => s.some((x) => x.person_id === displaced.person_id)
+          ? s
+          : [...s, { draft_id: draft.id, person_id: displaced.person_id }]);
+      }
+      return cleaned;
+    });
+    setLocalStage((s) => s.filter((x) => x.person_id !== personId));
+  }
+
+  async function onMove({ callingId, personId, fromCallingId }: { callingId: string; personId: string; fromCallingId: string | null; fromStaging: boolean }) {
+    applyLocalMove(callingId, personId, fromCallingId);
+    startTransition(async () => {
+      try { await movePerson({ draftId: draft.id, callingId, personId }); }
+      catch (err) { console.error('Move failed', err); alert('Move failed — reload the page.'); }
+    });
+  }
+
+  async function onUnassignDropTarget(personId: string) {
+    setLocalAssign((prev) => prev.filter((a) => a.person_id !== personId));
+    setLocalStage((prev) => prev.filter((x) => x.person_id !== personId));
+    startTransition(async () => {
+      try { await unassign(draft.id, personId); }
+      catch (err) { console.error('Unassign failed', err); }
+    });
+  }
+
+  async function onToggleCalled(callingId: string, next: boolean) {
+    setLocalAssign((prev) => prev.map((a) => a.calling_id === callingId ? { ...a, called: next } : a));
+    startTransition(async () => { try { await setCalled(draft.id, callingId, next); } catch (e) { console.error(e); } });
+  }
+  async function onToggleSustained(callingId: string, next: boolean) {
+    setLocalAssign((prev) => prev.map((a) => a.calling_id === callingId ? { ...a, sustained: next } : a));
+    startTransition(async () => { try { await setSustained(draft.id, callingId, next); } catch (e) { console.error(e); } });
+  }
+
+  function onUnassignedAreaClick() {
+    if (drag.active) { onUnassignDropTarget(drag.active.personId); drag.drop(); }
+  }
+
+  function onStagePickup(personId: string) {
+    drag.pickup({ personId, fromCallingId: null, fromStaging: true });
+  }
+
+  function onUnassignedPickup(personId: string) {
+    drag.pickup({ personId, fromCallingId: null, fromStaging: false });
+  }
 
   return (
     <div className="md:flex md:min-h-screen">
       <div className="md:sticky md:top-0 md:h-screen">
         <SidebarFilter userId={userId} organizations={organizations} counts={orgCounts}
-                       noCallingCount={unassigned.length} mode="draft" onChange={setFilter} />
+                       noCallingCount={unassignedPeople.length} mode="draft" onChange={setFilter} />
       </div>
       <main className="flex-1">
         <div className="bg-draft text-white px-6 py-3">
           <p className="font-numeric text-xs uppercase tracking-wider opacity-80">Draft</p>
           <h1 className="text-2xl">{draft.name}</h1>
+          {drag.active && <p className="text-xs mt-1 opacity-90">Carrying: {peopleById.get(drag.active.personId)?.name} — tap a calling to place, or tap Members Without a Calling to unassign.</p>}
         </div>
 
         <section className="px-6 py-4 border-b border-black/10 bg-white">
@@ -74,35 +146,131 @@ export function DraftView({
           <div className="flex flex-wrap gap-2 min-h-[2.5rem]">
             {stagedPeople.length === 0
               ? <span className="text-sm italic text-black/40">No one in staging.</span>
-              : stagedPeople.map((p) => <PersonChip key={p.id} name={p.name} />)}
+              : stagedPeople.map((p) => (
+                <PersonChip key={p.id} name={p.name}
+                            selected={drag.active?.personId === p.id}
+                            onPickup={() => onStagePickup(p.id)} />
+              ))}
           </div>
         </section>
 
-        <section className="px-6 py-4 border-b border-black/10 bg-surface">
-          <h2 className="text-sm uppercase tracking-wide text-black/60 mb-2">Changes from Master</h2>
-          <p className="text-sm text-black/60">[populated in a later task]</p>
-        </section>
+        <ChangesPanel
+          organizations={organizations}
+          callings={callings}
+          peopleById={peopleById}
+          masterAssignments={masterAssignments}
+          draftAssignments={localAssign}
+          staging={localStage}
+        />
 
         <div className="px-6 py-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {visibleOrgs.map((o) => (
-            <OrgCard key={o.id} name={o.name}
-                     callings={callingsByOrg.get(o.id) ?? []}
-                     assignmentsByCallingId={displayMap}
-                     peopleById={peopleById}
-                     mode="draft" />
+            <OrgCard
+              key={o.id}
+              name={o.name}
+              callings={callingsByOrg.get(o.id) ?? []}
+              assignmentsByCallingId={displayMap}
+              peopleById={peopleById}
+              mode="draft"
+              draftId={draft.id}
+              draftMeta={draftMeta}
+              onMove={onMove}
+              onToggleCalled={onToggleCalled}
+              onToggleSustained={onToggleSustained}
+            />
           ))}
         </div>
 
-        <section className="mx-6 mb-10 bg-surface border border-black/10 rounded-lg p-4">
+        <section
+          onClick={onUnassignedAreaClick}
+          className={`mx-6 mb-10 bg-surface border rounded-lg p-4 ${drag.active ? 'border-draft cursor-copy' : 'border-black/10'}`}
+        >
           <h2 className="text-lg text-primary mb-3">
             Members Without a Calling
-            <span className="ml-2 text-xs font-numeric text-black/50">({unassigned.length})</span>
+            <span className="ml-2 text-xs font-numeric text-black/50">({unassignedPeople.length})</span>
           </h2>
           <div className="flex flex-wrap gap-2">
-            {unassigned.map((p) => <PersonChip key={p.id} name={p.name} />)}
+            {unassignedPeople.map((p) => (
+              <PersonChip key={p.id} name={p.name}
+                          selected={drag.active?.personId === p.id}
+                          onPickup={() => onUnassignedPickup(p.id)} />
+            ))}
           </div>
         </section>
       </main>
     </div>
+  );
+}
+
+function ChangesPanel({
+  organizations, callings, peopleById, masterAssignments, draftAssignments, staging,
+}: {
+  organizations: Organization[];
+  callings: Calling[];
+  peopleById: Map<string, Person>;
+  masterAssignments: MasterAssignment[];
+  draftAssignments: DraftAssignment[];
+  staging: DraftStaging[];
+}) {
+  const stagedIds = new Set(staging.map((s) => s.person_id));
+  const masterByCalling = new Map(masterAssignments.map((a) => [a.calling_id, a.person_id]));
+  const draftByCalling = new Map(draftAssignments.map((a) => [a.calling_id, a.person_id]));
+  const callingLabel = new Map<string, string>();
+  const orgName = new Map(organizations.map((o) => [o.id, o.name]));
+  for (const c of callings) callingLabel.set(c.id, `${orgName.get(c.organization_id) ?? ''} — ${c.title}`);
+
+  // Collect one row per affected person
+  type Row = { personId: string; was: string; now: string };
+  const byPerson = new Map<string, Row>();
+
+  const allCallingIds = new Set<string>([...masterByCalling.keys(), ...draftByCalling.keys()]);
+  for (const cid of allCallingIds) {
+    const mPid = masterByCalling.get(cid);
+    const dPid = draftByCalling.get(cid);
+    if (mPid === dPid) continue;
+    if (mPid) {
+      const nowCalling = [...draftByCalling.entries()].find(([, pid]) => pid === mPid)?.[0];
+      const nowLabel = nowCalling ? callingLabel.get(nowCalling)! : (stagedIds.has(mPid) ? 'Staging' : 'Unassigned');
+      byPerson.set(mPid, { personId: mPid, was: callingLabel.get(cid) ?? '—', now: nowLabel });
+    }
+    if (dPid) {
+      if (byPerson.has(dPid)) continue;
+      const wasCalling = [...masterByCalling.entries()].find(([, pid]) => pid === dPid)?.[0];
+      const wasLabel = wasCalling ? callingLabel.get(wasCalling)! : 'Unassigned';
+      byPerson.set(dPid, { personId: dPid, was: wasLabel, now: callingLabel.get(cid) ?? '—' });
+    }
+  }
+  for (const pid of stagedIds) {
+    if (byPerson.has(pid)) continue;
+    const wasCalling = [...masterByCalling.entries()].find(([, p]) => p === pid)?.[0];
+    const wasLabel = wasCalling ? callingLabel.get(wasCalling)! : 'Unassigned';
+    byPerson.set(pid, { personId: pid, was: wasLabel, now: 'Staging' });
+  }
+
+  const rows = [...byPerson.values()]
+    .map((r) => ({ ...r, name: peopleById.get(r.personId)?.name ?? r.personId }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <section className="px-6 py-4 border-b border-black/10 bg-surface">
+      <h2 className="text-sm uppercase tracking-wide text-black/60 mb-2">
+        Changes from Master ({rows.length})
+      </h2>
+      {rows.length === 0 ? (
+        <p className="text-sm italic text-black/40">No changes yet.</p>
+      ) : (
+        <ul className="text-sm space-y-1">
+          {rows.map((r) => (
+            <li key={r.personId}>
+              <span className="font-medium">{r.name}</span>
+              <span className="text-black/50"> · Was: </span>
+              <span>{r.was}</span>
+              <span className="text-black/50"> → Now: </span>
+              <span className={r.now === 'Staging' ? 'text-draft font-medium' : ''}>{r.now}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
