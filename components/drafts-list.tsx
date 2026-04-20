@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { listDrafts, createDraft, deleteDraft, renameDraft } from '@/lib/data/drafts';
 import type { DraftRow } from '@/lib/types';
 import { Plus, Trash2, Pencil } from 'lucide-react';
+import { Header } from './header';
 
 export function DraftsList() {
   const [rows, setRows] = useState<DraftRow[]>([]);
@@ -36,6 +37,8 @@ export function DraftsList() {
   }
 
   return (
+    <>
+    <Header />
     <main className="container mx-auto px-6 py-8">
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-3xl text-primary">Drafts</h1>
@@ -85,5 +88,6 @@ export function DraftsList() {
         {rows.length === 0 && <p className="text-sm text-black/60">No drafts yet.</p>}
       </ul>
     </main>
+    </>
   );
 }

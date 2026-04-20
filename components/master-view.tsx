@@ -6,6 +6,7 @@ import { SidebarFilter } from './sidebar-filter';
 import { OrgCard } from './org-card';
 import { UnassignedSection } from './unassigned-section';
 import { PresenceBadge } from './presence-badge';
+import { Header } from './header';
 import { createClient } from '@/lib/supabase/client';
 import { WARD_ID } from '@/lib/types';
 import type { FilterState } from '@/lib/filter-state';
@@ -67,7 +68,9 @@ export function MasterView(props: {
     : organizations.filter((o) => filter.orgSlugs.has(o.slug) || (filter.orgSlugs.size === 0 && !filter.noCalling));
 
   return (
-    <div className="md:flex md:min-h-screen">
+    <>
+      <Header />
+      <div className="md:flex md:min-h-[calc(100vh-3rem)]">
       <button
         aria-label="Toggle filter menu"
         className="md:hidden fixed top-3 left-3 z-40 bg-white border border-black/20 rounded p-2"
@@ -127,6 +130,7 @@ export function MasterView(props: {
           <UnassignedSection people={unassigned} />
         )}
       </main>
-    </div>
+      </div>
+    </>
   );
 }

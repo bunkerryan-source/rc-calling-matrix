@@ -11,6 +11,7 @@ import { movePerson, unassign, setCalled, setSustained } from '@/lib/data/drafts
 import { createClient } from '@/lib/supabase/client';
 import { PromoteModal } from './promote-modal';
 import { PresenceBadge } from './presence-badge';
+import { Header } from './header';
 
 function computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging }: {
   organizations: Organization[];
@@ -200,7 +201,9 @@ function DraftViewInner({
   }
 
   return (
-    <div className="md:flex md:min-h-screen">
+    <>
+      <Header />
+      <div className="md:flex md:min-h-[calc(100vh-3rem)]">
       <div className="md:sticky md:top-0 md:h-screen">
         <SidebarFilter userId={userId} organizations={organizations} counts={orgCounts}
                        noCallingCount={unassignedPeople.length} mode="draft" onChange={setFilter} />
@@ -289,7 +292,8 @@ function DraftViewInner({
           onClose={() => setPromoteOpen(false)}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
