@@ -10,6 +10,7 @@ import type { Calling, DraftAssignment, DraftStaging, MasterAssignment, Organiza
 import { movePerson, unassign, setCalled, setSustained } from '@/lib/data/drafts';
 import { createClient } from '@/lib/supabase/client';
 import { PromoteModal } from './promote-modal';
+import { PresenceBadge } from './presence-badge';
 
 function computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging }: {
   organizations: Organization[];
@@ -211,12 +212,15 @@ function DraftViewInner({
             <h1 className="text-2xl">{draft.name}</h1>
             {drag.active && <p className="text-xs mt-1 opacity-90">Carrying: {peopleById.get(drag.active.personId)?.name} — tap a calling to place, or tap Members Without a Calling to unassign.</p>}
           </div>
-          {!draft.archived && (
-            <button onClick={() => setPromoteOpen(true)}
-                    className="px-3 py-1.5 rounded bg-white text-draft font-medium">
-              Promote
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            <PresenceBadge channelName={`presence:draft:${draft.id}`} userId={userId} />
+            {!draft.archived && (
+              <button onClick={() => setPromoteOpen(true)}
+                      className="px-3 py-1.5 rounded bg-white text-draft font-medium">
+                Promote
+              </button>
+            )}
+          </div>
         </div>
 
         <section className="px-6 py-4 border-b border-black/10 bg-white">

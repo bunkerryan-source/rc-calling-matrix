@@ -5,6 +5,7 @@ import { Menu, X } from 'lucide-react';
 import { SidebarFilter } from './sidebar-filter';
 import { OrgCard } from './org-card';
 import { UnassignedSection } from './unassigned-section';
+import { PresenceBadge } from './presence-badge';
 import { createClient } from '@/lib/supabase/client';
 import { WARD_ID } from '@/lib/types';
 import type { FilterState } from '@/lib/filter-state';
@@ -87,11 +88,16 @@ export function MasterView(props: {
       </div>
 
       <main className="flex-1 px-6 pt-16 pb-8 md:py-8">
-        <header className="mb-8">
-          <h1 className="text-3xl text-primary">Calling Matrix — Rancho Carrillo Ward</h1>
-          <p className="mt-2 text-sm text-black/60 font-numeric">
-            {people.length} members · {assignments.length} assignments · {organizations.length} organizations
-          </p>
+        <header className="mb-8 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl text-primary">Calling Matrix — Rancho Carrillo Ward</h1>
+            <p className="mt-2 text-sm text-black/60 font-numeric">
+              {people.length} members · {assignments.length} assignments · {organizations.length} organizations
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <PresenceBadge channelName="presence:master" userId={userId} />
+          </div>
         </header>
 
         {showOrgs && (
