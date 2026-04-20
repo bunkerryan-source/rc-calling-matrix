@@ -1,6 +1,6 @@
 import { loadMaster } from '@/lib/data/master';
 import { OrgCard } from '@/components/org-card';
-import { PersonChip } from '@/components/person-chip';
+import { UnassignedSection } from '@/components/unassigned-section';
 
 export default async function HomePage() {
   const { organizations, callings, people, assignments } = await loadMaster();
@@ -39,17 +39,7 @@ export default async function HomePage() {
         ))}
       </div>
 
-      <section className="mt-10 bg-surface border border-black/10 rounded-lg p-4">
-        <h2 className="text-lg text-primary mb-3">
-          Members Without a Calling
-          <span className="ml-2 text-xs font-numeric text-black/50">({unassignedPeople.length})</span>
-        </h2>
-        <div className="flex flex-wrap gap-2">
-          {unassignedPeople.map((p) => (
-            <PersonChip key={p.id} name={p.name} />
-          ))}
-        </div>
-      </section>
+      <UnassignedSection people={unassignedPeople} />
     </main>
   );
 }
