@@ -7,7 +7,7 @@ import { PersonChip } from './person-chip';
 import { DragProvider, useDrag } from '@/lib/drag-context';
 import type { FilterState } from '@/lib/filter-state';
 import type { Calling, DraftAssignment, DraftStaging, MasterAssignment, Organization, Person } from '@/lib/types';
-import { movePerson, unassign, setCalled, setSustained } from '@/lib/data/drafts';
+import { movePerson, unassign, setCalled, setSustained, setCommunicator, type Communicator } from '@/lib/data/drafts';
 import { createClient } from '@/lib/supabase/client';
 import { PromoteModal } from './promote-modal';
 import { PresenceBadge } from './presence-badge';
@@ -66,12 +66,13 @@ export function DraftView(props: {
   people: Person[];
   draftAssignments: DraftAssignment[];
   staging: DraftStaging[];
+  communicators: Array<{ person_id: string; role: Communicator }>;
 }) {
   return <DragProvider><DraftViewInner {...props} /></DragProvider>;
 }
 
 function DraftViewInner({
-  userId, draft, masterAssignments, organizations, callings, people, draftAssignments, staging,
+  userId, draft, masterAssignments, organizations, callings, people, draftAssignments, staging, communicators,
 }: {
   userId: string | null;
   draft: { id: string; name: string; archived: boolean };
@@ -81,10 +82,14 @@ function DraftViewInner({
   people: Person[];
   draftAssignments: DraftAssignment[];
   staging: DraftStaging[];
+  communicators: Array<{ person_id: string; role: Communicator }>;
 }) {
   const [filter, setFilter] = useState<FilterState>({ all: true, orgSlugs: new Set(), setApart: false, noCalling: false });
   const [localAssign, setLocalAssign] = useState(draftAssignments);
   const [localStage, setLocalStage] = useState(staging);
+  const [localCommunicator, setLocalCommunicator] = useState<Map<string, Communicator>>(
+    () => new Map(communicators.map((c) => [c.person_id, c.role])),
+  );
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [, startTransition] = useTransition();
   const drag = useDrag();
@@ -102,6 +107,13 @@ function DraftViewInner({
         const { data } = await supabase.from('draft_staging')
           .select('draft_id, person_id').eq('draft_id', draft.id);
         if (data) setLocalStage(data);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'draft_change_communicator', filter: `draft_id=eq.${draft.id}` }, async () => {
+        const { data } = await supabase.from('draft_change_communicator')
+          .select('person_id, role').eq('draft_id', draft.id);
+        if (data) {
+          setLocalCommunicator(new Map(data.map((r) => [r.person_id, r.role as Communicator])));
+        }
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -188,6 +200,19 @@ function DraftViewInner({
     startTransition(async () => { try { await setSustained(draft.id, callingId, next); } catch (e) { console.error(e); } });
   }
 
+  async function onSetCommunicator(personId: string, role: Communicator | null) {
+    setLocalCommunicator((prev) => {
+      const next = new Map(prev);
+      if (role === null) next.delete(personId);
+      else next.set(personId, role);
+      return next;
+    });
+    startTransition(async () => {
+      try { await setCommunicator(draft.id, personId, role); }
+      catch (err) { console.error('Set communicator failed', err); }
+    });
+  }
+
   function onUnassignedAreaClick() {
     if (drag.active) { onUnassignDropTarget(drag.active.personId); drag.drop(); }
   }
@@ -246,6 +271,8 @@ function DraftViewInner({
           masterAssignments={masterAssignments}
           draftAssignments={localAssign}
           staging={localStage}
+          communicator={localCommunicator}
+          onSetCommunicator={onSetCommunicator}
         />
 
         <div className="px-6 py-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -299,6 +326,7 @@ function DraftViewInner({
 
 function ChangesPanel({
   organizations, callings, peopleById, masterAssignments, draftAssignments, staging,
+  communicator, onSetCommunicator,
 }: {
   organizations: Organization[];
   callings: Calling[];
@@ -306,8 +334,15 @@ function ChangesPanel({
   masterAssignments: MasterAssignment[];
   draftAssignments: DraftAssignment[];
   staging: DraftStaging[];
+  communicator: Map<string, Communicator>;
+  onSetCommunicator: (personId: string, role: Communicator | null) => void;
 }) {
   const rows = computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging });
+  const ROLES: ReadonlyArray<{ value: Communicator; label: string }> = [
+    { value: 'bishop', label: 'B' },
+    { value: 'first', label: '1st' },
+    { value: 'second', label: '2nd' },
+  ];
 
   return (
     <section className="px-6 py-4 border-b border-black/10 bg-surface">
@@ -318,15 +353,36 @@ function ChangesPanel({
         <p className="text-sm italic text-black/40">No changes yet.</p>
       ) : (
         <ul className="text-sm space-y-1">
-          {rows.map((r) => (
-            <li key={r.personId}>
-              <span className="font-medium">{r.name}</span>
-              <span className="text-black/50"> · Was: </span>
-              <span>{r.was}</span>
-              <span className="text-black/50"> → Now: </span>
-              <span className={r.now === 'Staging' ? 'text-draft font-medium' : ''}>{r.now}</span>
-            </li>
-          ))}
+          {rows.map((r) => {
+            const current = communicator.get(r.personId) ?? null;
+            return (
+              <li key={r.personId} className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <span className="font-medium">{r.name}</span>
+                  <span className="text-black/50"> · Was: </span>
+                  <span>{r.was}</span>
+                  <span className="text-black/50"> → Now: </span>
+                  <span className={r.now === 'Staging' ? 'text-draft font-medium' : ''}>{r.now}</span>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {ROLES.map(({ value, label }) => {
+                    const active = current === value;
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => onSetCommunicator(r.personId, active ? null : value)}
+                        className={`px-2 py-0.5 rounded text-xs ${active
+                          ? 'bg-draft text-white'
+                          : 'bg-white text-black/60 border border-black/15 hover:bg-black/5'}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

@@ -12,9 +12,10 @@ export default async function DraftDetailPage({ params }: { params: Promise<{ id
   if (!draft) notFound();
 
   const master = await loadMaster();
-  const [assignRes, stageRes] = await Promise.all([
+  const [assignRes, stageRes, commRes] = await Promise.all([
     supabase.from('draft_assignments').select('draft_id, calling_id, person_id, called, sustained').eq('draft_id', id),
     supabase.from('draft_staging').select('draft_id, person_id').eq('draft_id', id),
+    supabase.from('draft_change_communicator').select('person_id, role').eq('draft_id', id),
   ]);
 
   return (
@@ -27,6 +28,7 @@ export default async function DraftDetailPage({ params }: { params: Promise<{ id
       people={master.people}
       draftAssignments={assignRes.data ?? []}
       staging={stageRes.data ?? []}
+      communicators={(commRes.data ?? []) as Array<{ person_id: string; role: 'bishop' | 'first' | 'second' }>}
     />
   );
 }

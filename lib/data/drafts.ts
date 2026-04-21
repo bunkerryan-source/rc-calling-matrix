@@ -134,3 +134,43 @@ export async function setSustained(draftId: string, callingId: string, sustained
     .eq('draft_id', draftId).eq('calling_id', callingId);
   if (error) throw error;
 }
+
+export type Communicator = 'bishop' | 'first' | 'second';
+
+export async function loadCommunicators(
+  draftId: string,
+): Promise<Array<{ person_id: string; role: Communicator }>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('draft_change_communicator')
+    .select('person_id, role')
+    .eq('draft_id', draftId);
+  if (error) throw error;
+  return (data ?? []) as Array<{ person_id: string; role: Communicator }>;
+}
+
+export async function setCommunicator(
+  draftId: string,
+  personId: string,
+  role: Communicator | null,
+): Promise<void> {
+  const supabase = createClient();
+  if (role === null) {
+    const { error } = await supabase
+      .from('draft_change_communicator')
+      .delete()
+      .eq('draft_id', draftId)
+      .eq('person_id', personId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase
+    .from('draft_change_communicator')
+    .upsert({
+      draft_id: draftId,
+      person_id: personId,
+      role,
+      updated_at: new Date().toISOString(),
+    });
+  if (error) throw error;
+}
