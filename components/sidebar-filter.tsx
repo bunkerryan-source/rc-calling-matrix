@@ -7,7 +7,7 @@ type SidebarEntry =
   | { type: 'single'; label: string; slug: string }
   | { type: 'group'; label: string; slugs: string[] };
 
-const SIDEBAR_ENTRIES: SidebarEntry[] = [
+const MAIN_ENTRIES: SidebarEntry[] = [
   { type: 'single', label: 'Bishopric', slug: 'bishopric' },
   { type: 'single', label: 'Clerks/Extended Bishopric', slug: 'clerks-extended-bishopric' },
   { type: 'group', label: 'Young Men', slugs: ['deacons-quorum', 'teachers-quorum', 'priests-quorum'] },
@@ -28,6 +28,48 @@ const SIDEBAR_ENTRIES: SidebarEntry[] = [
       'ward-history',
       'friendship-meal-coordination',
       'temple-prep',
+      'building-maintenance',
+      'ward-activities',
+    ],
+  },
+];
+
+const BISHOPRIC_ROLE_ENTRIES: SidebarEntry[] = [
+  {
+    type: 'group',
+    label: 'Bishop',
+    slugs: [
+      'priests-quorum',
+      'young-women-15-18',
+      'clerks-extended-bishopric',
+      'young-women',
+      'elders-quorum',
+      'relief-society',
+    ],
+  },
+  {
+    type: 'group',
+    label: 'First Counselor',
+    slugs: [
+      'teachers-quorum',
+      'young-women-13-14',
+      'sunday-school',
+      'emergency-prep',
+      'music',
+      'employment',
+      'single-adults',
+      'ward-history',
+      'friendship-meal-coordination',
+      'temple-prep',
+    ],
+  },
+  {
+    type: 'group',
+    label: 'Second Counselor',
+    slugs: [
+      'deacons-quorum',
+      'young-women-11-12',
+      'primary',
       'building-maintenance',
       'ward-activities',
     ],
@@ -93,6 +135,17 @@ export function SidebarFilter({
     return `w-full text-left px-3 py-1.5 rounded text-sm flex items-center justify-between ${active ? accent : unselected}`;
   }
 
+  function renderEntry(e: SidebarEntry) {
+    const active = entryActive(e);
+    const count = entryCount(e);
+    return (
+      <button key={e.label} className={pillClass(active)} onClick={() => toggleEntry(e)}>
+        <span>{e.label}</span>
+        <span className="font-numeric text-xs opacity-70">{count}</span>
+      </button>
+    );
+  }
+
   return (
     <nav className="w-[220px] shrink-0 border-r border-black/10 bg-white h-full p-3 overflow-y-auto">
       <button
@@ -102,16 +155,11 @@ export function SidebarFilter({
         <span>All</span>
       </button>
       <div className="mt-2 space-y-1">
-        {SIDEBAR_ENTRIES.map((e) => {
-          const active = entryActive(e);
-          const count = entryCount(e);
-          return (
-            <button key={e.label} className={pillClass(active)} onClick={() => toggleEntry(e)}>
-              <span>{e.label}</span>
-              <span className="font-numeric text-xs opacity-70">{count}</span>
-            </button>
-          );
-        })}
+        {MAIN_ENTRIES.map(renderEntry)}
+      </div>
+      <div className="my-3 border-t border-black/10" />
+      <div className="space-y-1">
+        {BISHOPRIC_ROLE_ENTRIES.map(renderEntry)}
       </div>
       <div className="my-3 border-t border-black/10" />
       {mode === 'master' && (
