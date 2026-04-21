@@ -9,11 +9,11 @@ A multi-user Next.js + Supabase web app that replaces the Rancho Carrillo Ward b
 3. **[Original spec from Ryan](docs/source/rc-calling-matrix-spec.md)** — historical input that informed the design doc.
 4. **[JSX reference artifact](docs/source/rc-calling-matrix.jsx)** — used as a UX/data reference only. **Do not** copy patterns from it; the design doc supersedes it.
 
-## Status (as of 2026-04-20, end of session 2)
+## Status (as of 2026-04-20, end of session 3)
 
 **MVP shipped.** All 40 plan tasks complete. Live at **https://rccallingmatrix.vercel.app**.
 
-Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) all landed in session 2 along with several post-deploy bug fixes.
+Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) landed in session 2. Session 3 shipped admin RPC-based user grant flow plus three auth bug fixes (see below).
 
 ## How to pick up next session
 
@@ -74,6 +74,21 @@ Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header n
 - **Tap-to-move not working** — first attempted fix (stopPropagation on PersonChip) only handled one leg. Final fix: moved all pickup+drop logic to `CallingRow`'s `<li>` onClick; chip has no click handler of its own inside calling rows. Commit `35ffad0`.
 - **Sidebar mis-grouped** — initially showed one pill per org; updated to grouped entries per ward spec. Young Women umbrella org moved from Misc → Young Women group. Commit `87e07b4`.
 
+## Session 3 — Admin grant flow + auth fixes
+
+- **Admin "Grant access" UI** — new Users tab on `/admin` lets admins paste an email + optional display name to grant ward access without SQL. Backed by two SECURITY DEFINER RPCs in `supabase/migrations/20260420130000_admin_user_rpcs.sql`: `admin_list_user_access()` and `admin_grant_access(target_email, display_name)`. Each RPC re-checks the caller already has ward access. User must still be created in the Supabase dashboard first (Authentication → Users → Create new user) — the Supabase dashboard does NOT let you set a temp password at creation time; password must be set afterward via the user's row or via `supabase.auth.admin.updateUserById` / an admin reset.
+- **Ambiguous column bug in admin RPCs** — `RETURNS TABLE (user_id uuid, ...)` creates implicit OUT params that shadow column references. The existence check `where user_id = auth.uid()` errored "column reference 'user_id' is ambiguous". Fix: alias `user_access` as `ua` in both RPCs. `supabase/migrations/20260420140000_admin_user_rpcs_fix.sql`.
+- **Set-password infinite spinner** — `supabase.auth.updateUser({ password, data: { must_change_password: false } })` succeeded, but the cookie still carried stale `user_metadata` so middleware kept redirecting back to `/account/set-password`. Since the redirect target matched the current route, React preserved the form's `submitting=true` state and the button stayed "Saving…" forever. Fix: `await supabase.auth.refreshSession()` (rewrites the cookie with updated metadata), then `window.location.assign('/')` (hard reload resets React state). `app/account/set-password/page.tsx`.
+- **`must_change_password` flag** — stored in `auth.users.raw_user_meta_data` JSONB. To set for a user via the SQL editor:
+  ```sql
+  update auth.users
+  set raw_user_meta_data =
+    coalesce(raw_user_meta_data, '{}'::jsonb) || '{"must_change_password": true}'::jsonb
+  where email = '<target email>';
+  ```
+  Admin UI reads this flag via the RPC and shows a "needs password change" badge on the user row.
+- **Cascade gotcha** — deleting a user in Supabase Auth CASCADE-drops their `user_access` row. Recreating with the same email gives a new `user_id`, so the old grant is gone — you have to grant access again. Bit me once with `rbunker@abpcapital.com` during session 3 testing.
+
 ## Workflow conventions
 
 - Working dir: `c:\Users\rbunker\claude-workspace\projects\church\rc-calling-matrix`
@@ -93,9 +108,18 @@ Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header n
 ## Potential next steps
 
 - End-to-end smoke test on prod by the bishopric.
-- Add bishopric members to `user_access` (each needs a Supabase auth user first via dashboard).
+- Add bishopric members to `user_access` via the Admin tab (each needs a Supabase auth user created first via dashboard, then grant via UI).
+- **One-shot user creation** — collapse "create user in dashboard + set temp password + mark must_change_password + grant access" into a single admin action. Requires a Next.js API route that calls `supabase.auth.admin.createUser` with the service-role key (stored server-side only). Ryan said yes to this in session 3 but we bailed to chase bugs; still queued.
 - If concurrent editing proves messy, consider splitting a dedicated prod Supabase project.
 - Consider swapping tap-to-move for real HTML5 drag if bishopric members find click-then-click unintuitive (currently intentional per spec).
+
+## Queued feature ideas (raised end of session 3)
+
+1. **Bishopric-in-charge header per org.** Under each org heading in master/draft views (e.g., below "Deacons Quorum" and above "President"), indicate the bishopric member assigned to oversee that organization. Needs a new table mapping `org_id → bishopric_user_id` (or a dedicated role/field on `orgs`), an admin UI to set it, and a read-only label on each org section header.
+2. **Per-change communicator assignment in draft diffs.** In a draft's Changes section, let the editor toggle which bishopric member is responsible for communicating that specific change to the affected individual. Probably a new column on the draft-change row (e.g., `assigned_communicator_user_id`) with a small dropdown per row, plus surfacing the assignment in the post-promotion snapshot for follow-through.
+3. **Read-only role for master.** New admin tier where a user can see the master view but cannot create drafts, edit the set-apart toggle, or see/use the admin tab. Requires a `role` column on `user_access` (e.g., `viewer` | `editor` | `admin`) plus RLS policy updates and client-side gating on draft/admin routes.
+4. **Restrict promote to bishopric.** Only users with a `bishopric` / `admin` role should be able to call `promote_draft`. Needs the role column above and a check inside the `promote_draft` RPC (raise exception if caller role isn't bishopric) plus hiding the Promote button in the UI for non-bishopric users.
+5. **Report exports.** Potential exports: full current master (org → calling → person → set-apart state), a draft's proposed changes, and promotion history over a date range. Candidate formats: CSV and PDF. Could ship as a "Reports" tab on admin or a printer-friendly route. No backend work needed beyond a server-rendered page for the PDF path; CSV can be generated client-side from existing queries.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
