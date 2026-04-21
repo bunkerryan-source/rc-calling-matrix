@@ -80,6 +80,10 @@ function entrySlugs(e: SidebarEntry): string[] {
   return e.type === 'single' ? [e.slug] : e.slugs;
 }
 
+function entryKey(e: SidebarEntry): string {
+  return e.type === 'single' ? `s:${e.slug}` : `g:${e.slugs.join('|')}`;
+}
+
 export function SidebarFilter({
   userId,
   organizations,
@@ -139,7 +143,7 @@ export function SidebarFilter({
     const active = entryActive(e);
     const count = entryCount(e);
     return (
-      <button key={e.label} className={pillClass(active)} onClick={() => toggleEntry(e)}>
+      <button key={entryKey(e)} className={pillClass(active)} onClick={() => toggleEntry(e)}>
         <span>{e.label}</span>
         <span className="font-numeric text-xs opacity-70">{count}</span>
       </button>
