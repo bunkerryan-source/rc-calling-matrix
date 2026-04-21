@@ -324,6 +324,12 @@ function DraftViewInner({
   );
 }
 
+const COMMUNICATOR_ROLES: ReadonlyArray<{ value: Communicator; label: string }> = [
+  { value: 'bishop', label: 'B' },
+  { value: 'first', label: '1st' },
+  { value: 'second', label: '2nd' },
+];
+
 function ChangesPanel({
   organizations, callings, peopleById, masterAssignments, draftAssignments, staging,
   communicator, onSetCommunicator,
@@ -338,11 +344,6 @@ function ChangesPanel({
   onSetCommunicator: (personId: string, role: Communicator | null) => void;
 }) {
   const rows = computeDiff({ organizations, callings, peopleById, masterAssignments, draftAssignments, staging });
-  const ROLES: ReadonlyArray<{ value: Communicator; label: string }> = [
-    { value: 'bishop', label: 'B' },
-    { value: 'first', label: '1st' },
-    { value: 'second', label: '2nd' },
-  ];
 
   return (
     <section className="px-6 py-4 border-b border-black/10 bg-surface">
@@ -365,11 +366,14 @@ function ChangesPanel({
                   <span className={r.now === 'Staging' ? 'text-draft font-medium' : ''}>{r.now}</span>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  {ROLES.map(({ value, label }) => {
+                  {COMMUNICATOR_ROLES.map(({ value, label }) => {
                     const active = current === value;
                     return (
                       <button
                         key={value}
+                        type="button"
+                        aria-pressed={active}
+                        aria-label={`Assign ${value === 'bishop' ? 'Bishop' : value === 'first' ? 'First Counselor' : 'Second Counselor'} as communicator for ${r.name}`}
                         onClick={() => onSetCommunicator(r.personId, active ? null : value)}
                         className={`px-2 py-0.5 rounded text-xs ${active
                           ? 'bg-draft text-white'

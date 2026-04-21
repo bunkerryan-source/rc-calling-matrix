@@ -137,18 +137,6 @@ export async function setSustained(draftId: string, callingId: string, sustained
 
 export type Communicator = 'bishop' | 'first' | 'second';
 
-export async function loadCommunicators(
-  draftId: string,
-): Promise<Array<{ person_id: string; role: Communicator }>> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('draft_change_communicator')
-    .select('person_id, role')
-    .eq('draft_id', draftId);
-  if (error) throw error;
-  return (data ?? []) as Array<{ person_id: string; role: Communicator }>;
-}
-
 export async function setCommunicator(
   draftId: string,
   personId: string,
@@ -164,6 +152,7 @@ export async function setCommunicator(
     if (error) throw error;
     return;
   }
+  const { data: userRes } = await supabase.auth.getUser();
   const { error } = await supabase
     .from('draft_change_communicator')
     .upsert({
@@ -171,6 +160,7 @@ export async function setCommunicator(
       person_id: personId,
       role,
       updated_at: new Date().toISOString(),
+      updated_by: userRes.user?.id ?? null,
     });
   if (error) throw error;
 }
