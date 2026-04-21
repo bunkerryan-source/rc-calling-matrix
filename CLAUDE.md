@@ -9,11 +9,11 @@ A multi-user Next.js + Supabase web app that replaces the Rancho Carrillo Ward b
 3. **[Original spec from Ryan](docs/source/rc-calling-matrix-spec.md)** — historical input that informed the design doc.
 4. **[JSX reference artifact](docs/source/rc-calling-matrix.jsx)** — used as a UX/data reference only. **Do not** copy patterns from it; the design doc supersedes it.
 
-## Status (as of 2026-04-20, end of session 3)
+## Status (as of 2026-04-21, end of session 4)
 
 **MVP shipped.** All 40 plan tasks complete. Live at **https://rccallingmatrix.vercel.app**.
 
-Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) landed in session 2. Session 3 shipped admin RPC-based user grant flow plus three auth bug fixes (see below).
+Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) landed in session 2. Session 3 shipped admin RPC-based user grant flow plus three auth bug fixes (see below). Session 4 added Bishop / 1st Counselor / 2nd Counselor sidebar role tabs.
 
 ## How to pick up next session
 
@@ -88,6 +88,11 @@ Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header n
   ```
   Admin UI reads this flag via the RPC and shows a "needs password change" badge on the user row.
 - **Cascade gotcha** — deleting a user in Supabase Auth CASCADE-drops their `user_access` row. Recreating with the same email gives a new `user_id`, so the old grant is gone — you have to grant access again. Bit me once with `rbunker@abpcapital.com` during session 3 testing.
+
+## Session 4 — Bishopric role tabs
+
+- **Sidebar Bishop / 1st Counselor / 2nd Counselor tabs.** Three new entries at the bottom of the sidebar (between Misc and the Set Apart / No Calling toggles, separated by their own divider) group the orgs each bishopric member oversees. Behave identically to the existing Young Men / YW / Misc grouped entries — clicking toggles the entry's full slug set on/off, count badge sums child org callings, active when every child slug is present. Static client-side config in `components/sidebar-filter.tsx` — no DB changes. Spec: [docs/superpowers/specs/2026-04-21-bishopric-role-tabs-design.md](docs/superpowers/specs/2026-04-21-bishopric-role-tabs-design.md). Commit `7e1016e`.
+- **Note for whoever lands queued idea #1.** When the per-org bishopric-member name header lands, the static role config in `BISHOPRIC_ROLE_ENTRIES` should be replaced with a DB-driven version derived from the same source of truth, so admin can edit assignments in-app and both features stay in sync.
 
 ## Workflow conventions
 
