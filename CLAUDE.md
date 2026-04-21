@@ -9,11 +9,11 @@ A multi-user Next.js + Supabase web app that replaces the Rancho Carrillo Ward b
 3. **[Original spec from Ryan](docs/source/rc-calling-matrix-spec.md)** — historical input that informed the design doc.
 4. **[JSX reference artifact](docs/source/rc-calling-matrix.jsx)** — used as a UX/data reference only. **Do not** copy patterns from it; the design doc supersedes it.
 
-## Status (as of 2026-04-21, end of session 4)
+## Status (as of 2026-04-21, end of session 5)
 
 **MVP shipped.** All 40 plan tasks complete. Live at **https://rccallingmatrix.vercel.app**.
 
-Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) landed in session 2. Session 3 shipped admin RPC-based user grant flow plus three auth bug fixes (see below). Session 4 added Bishop / 1st Counselor / 2nd Counselor sidebar role tabs.
+Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header nav, Deploy) landed in session 2. Session 3 shipped admin RPC-based user grant flow plus three auth bug fixes (see below). Session 4 added Bishop / 1st Counselor / 2nd Counselor sidebar role tabs. Session 5 added the per-change communicator assignment (B / 1st / 2nd toggle) on each row in a draft's Changes from Master panel.
 
 ## How to pick up next session
 
@@ -93,6 +93,13 @@ Phase 3–10 (Auth, Domain types, Master view, Drafts, Realtime, Admin, Header n
 
 - **Sidebar Bishop / 1st Counselor / 2nd Counselor tabs.** Three new entries at the bottom of the sidebar (between Misc and the Set Apart / No Calling toggles, separated by their own divider) group the orgs each bishopric member oversees. Behave identically to the existing Young Men / YW / Misc grouped entries — clicking toggles the entry's full slug set on/off, count badge sums child org callings, active when every child slug is present. Static client-side config in `components/sidebar-filter.tsx` — no DB changes. Spec: [docs/superpowers/specs/2026-04-21-bishopric-role-tabs-design.md](docs/superpowers/specs/2026-04-21-bishopric-role-tabs-design.md). Commit `7e1016e`.
 - **Note for whoever lands queued idea #1.** When the per-org bishopric-member name header lands, the static role config in `BISHOPRIC_ROLE_ENTRIES` should be replaced with a DB-driven version derived from the same source of truth, so admin can edit assignments in-app and both features stay in sync.
+
+## Session 5 — Communicator assignment
+
+- **Per-change communicator toggle.** Each row in the draft "Changes from Master" panel gets three small pill buttons — `B`, `1st`, `2nd` — assigning a bishopric member to follow up with that person. Click an inactive pill to set; click the active pill to clear; click a different pill to swap. State lives in a new `draft_change_communicator` table keyed `(draft_id, person_id)` with the same blanket RLS as every other table. Realtime via a third `postgres_changes` subscription in `DraftViewInner`. Spec: [docs/superpowers/specs/2026-04-21-draft-communicator-assignment-design.md](docs/superpowers/specs/2026-04-21-draft-communicator-assignment-design.md). Migration: `supabase/migrations/20260421120000_draft_change_communicator.sql`.
+- **Ephemeral by design.** The communicator assignment is never copied into `master_assignments` or `promotion_history.snapshot`, and is not shown in the Promote modal or the History view. The rows live on the draft and cascade-delete when the draft is deleted. Promotion archives the draft (existing behavior) but does not delete its communicator rows — they remain visible if the archived draft is reopened.
+- **Garbage collection: none.** When a person leaves the diff (e.g., a user reverts the change that put them there), their communicator row stays in the table but renders nowhere. If they re-enter the diff later, their prior role reappears.
+- **Update the queued-ideas list.** Idea #2 ("Per-change communicator assignment in draft diffs") is now done — strike it from the list or move it to a "shipped" subsection.
 
 ## Workflow conventions
 
